@@ -1,0 +1,337 @@
+---
+title: "McKnight Midterm PHP2560"
+author: "Olivia McKnight"
+date: "10/19/2020"
+output: html_document
+---
+<style type="text/css">
+.table {
+
+    width: 80%;
+    margin-left:10%;
+    margin-right:10%;
+}
+</style>
+##Introduction
+  Diamonds are one of the most sought after gemstones in the world, and they have a variety of different attributes by which they are described. These include carat, or the weight of the diamond, cut, or the quality of the cut of the diamond, color (color of the diamond), clarity (clarity of the diamond), depth percentage, which is a computation that takes into account the length, width, and depth of the diamond, and table (which is the width of the top of the diamond relative to the widest point). These all affect how a diamond is appraised and how much it will cost in USD. For my midterm, I will be analyzing an open source dataset, Diamonds Data, that consists of 53940 observations of the 11 variables listed below. Through statistical programming, I hope to reveal which variable is most closely correlated with price. I will begin this process by conducting an exploratory data analysis. Then, I will conduct a regression analysis to model the relationship between significant variables and price. Then, based on the model I develop, I will determine if it is possible to write a function that will return a diamond's price based on its other characteristics, using sample diamonds from the dataset. Then, I will generate randomly simulated diamonds and evaulate if my function is still effective.
+#ABOUT THE DATASET
+*Dataset:* Diamonds Data
+  53940 observations of 11 variables
+*Variables:*
+*diamondnum* number assigned to each diamond in the datset (1 -- 53940)
+*price* price in US dollars (\$326--\$18,823)
+*carat* weight of the diamond (0.2--5.01)
+*cut* quality of the cut (Fair, Good, Very Good, Premium, Ideal)
+*color* diamond colour, from J (worst) to D (best)
+*clarity* a measurement of how clear the diamond is (I1 (worst), SI2, SI1, VS2, VS1, VVS2, VVS1, IF (best))
+*depth* total depth percentage = z / mean(x, y) = 2 * z / (x + y) (43--79)
+*table* width of top of diamond relative to widest point (43--95)
+*price* price in US dollars (\$326--\$18,823)
+*x* length in mm (0--10.74)
+*y* width in mm (0--58.9)
+*z* depth in mm (0--31.8)
+Qualitative Features (Categorical) : *Cut, Color, Clarity*.
+Quantitative Features (Numerical) : *Carat, Depth , Table , Price , X , Y, Z*.
+
+#Guiding questions
+*Which of the variables above is most closely correlated to price?*
+*Is there a way to model how each of the other variables relates to price?*
+*Based on the above findings, is there a way to write a function that will return a price based on diamond characteristics?*
+*Can prices be generated for randomly generated diamonds?*
+
+##Exploratory Data Analysis
+  To begin the exploratory data analysis,  all necessary packages must be installed and placed into the library. Then, one must get an idea of the structure of the original dataset by viewing the structure of "diamonds_data". The "diamonds_data" is not in a format that is easy to understand, so it must be cleaned and modified. The categorical variables cut, color, and clarity are all characters. It will be difficult to conduct analyses with them in this format so using the mutate() functions they are turned into factors. The diamondnum variable is also dropped as it is simply an naming variable for the different diamonds and will not be helpful in the analysis. Next, several columns should be renamed as their current names are confusing. X is renamed to length, Y is renamed to width, Z is renamed to depth, and depth is renamed to depth_perc. The new dataset, called diamonds, is much easier to interpret.
+
+
+```{r, echo=FALSE}
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(docstring)
+library(scales)
+library(stringr)
+library(Hmisc)
+library(gridExtra)
+library(reshape2)
+library(pander)
+library(corrplot)
+library(plotly)
+library(lmtest)
+```
+
+```{r, echo=TRUE}
+#drop unnecessary columns (diamondnum) and rename for clarity
+diamonds <- diamonds_data %>%
+    arrange(cut, color, clarity) %>%
+    mutate(cut = as.factor(cut),
+           color = as.factor(color),
+           clarity = as.factor(clarity)) %>%
+    select(-diamondnum) %>%
+    rename(depth_perc = "depth", length = "x", width = "y", depth = "z")
+diamonds
+
+```
+  This dataset is comprised of three categorical variables: cut, color, and clarity. In order to get acquainted with the data, one must determine how many categories are in each variable, and how many diamonds are in each of those categories. Those counts were discerned using tidyverse functions, and made easy to understand using ggplot2 functions to make barcharts. Then, indicator variables were created for these variables, and those were plotted as histograms along with the continuous variables.
+```{r, echo=TRUE}
+#before exploring visually, get counts of our categorical variables
+##cut
+cut_count <- diamonds %>%
+  group_by(cut) %>%
+  count()
+cut_plot <- ggplot(cut_count, aes(x = cut, y = n, fill=cut)) + geom_col()
+
+##color
+color_count <- diamonds %>%
+  group_by(color) %>%
+  count()
+color_plot <- ggplot(color_count, aes(x = color, y = n, fill=color)) + geom_col()
+
+##clarity
+clarity_count <- diamonds %>%
+  group_by(clarity) %>%
+  count()
+clarity_plot <- ggplot(clarity_count, aes(x = clarity, y = n, fill=clarity)) + geom_col()
+
+#show plots together
+grid.arrange(cut_plot, color_plot, clarity_plot, ncol=2)
+
+
+```
+
+```{r, echo=TRUE}
+#create indicator variables
+#cat varaibles <- cut, color, clarity
+diamonds$cut <- factor(diamonds$cut, levels=c("Fair", "Good", "Very Good", "Premium", "Ideal"))
+diamonds$color <- factor(diamonds$color, levels=c("J", "I", "H", "G", "F", "E", "D"))
+diamonds$clarity <- factor(diamonds$clarity, levels=c("I1", "SI2", "SI1", "VS2", "VS1", "VVS2", "VVS1", "IF"))
+str(diamonds)
+
+diamonds$cut2 <- as.numeric(diamonds$cut)
+diamonds$color2 <- as.numeric(diamonds$color)
+diamonds$clarity2 <- as.numeric(diamonds$clarity)
+```
+
+```{r, echo=TRUE}
+#visualize variables as histograms
+par(mfrow=c(3,4))
+carat_hist <- hist(diamonds$carat, main=paste("Carat vs Count"), xlab='Carat Size',ylab = 'Count')
+depthperc_hist <- hist(diamonds$depth_perc, main=paste("Depth Perc vs Count"), xlab='Depth Percentage',ylab = 'Count')
+table_hist <- hist(diamonds$table, main=paste("Table vs Count"), xlab='Table',ylab = 'Count')
+price_hist <- hist(diamonds$price, main=paste("Price vs Count"), xlab='Price',ylab = 'Count')
+length_hist <- hist(diamonds$length, main=paste("Length vs Count"), xlab='Length',ylab = 'Count')
+width_hist <- hist(diamonds$width, main=paste("Width vs Count"), xlab='Width',ylab = 'Count')
+depth_hist <- hist(diamonds$depth, main=paste("Depth vs Count"), xlab='Depth',ylab = 'Count')
+cut_hist <- hist(diamonds$cut2, main=paste("Cut vs Count"), xlab='Cut',ylab = 'Count')
+color_hist <- hist(diamonds$color2, main=paste("Color vs Count"), xlab='Color',ylab = 'Count')
+clarity_hist <- hist(diamonds$clarity2, main=paste("Clarity vs Count"), xlab='Clarity',ylab = 'Count')
+
+```
+  A comprehensive but relatively simple exploratory data analysis was completed using the funModeling and Hmisc packages. Cumulative percentage values were generated for the cut, color, and clarity using this method. The cut with the highest cumulative percentage was Ideal, the color with the highest cumulative percentage was G, and the clarity with the highest cumulative percentage was SI1. The continuous variables (carat, depth_perc, table, price, length, width and depth) along with dummy variables created for cut, color, and clarity, were all plotted as histograms. From those plots, one can see that the majority of diamonds are under one carat. The majority of diamonds have a depth percentage around 62%. The most common table for the diamodns in this dataset is 58. Nearly all of the diamonds have a price that is lower than 5,000 USD. The lengths of diamonds is more varied than the other variables, with a range of about 3.3mm to 9mm. All of the diamonds have a width of under 10mm, and nearly all of the diamonds have a depth of under 5mm. The histograms for cut, color, and clarity align with the visualization in the bar charts in this analysis.
+```{r, echo=FALSE}
+library(funModeling)
+library(Hmisc)
+  summary(diamonds)
+  df_status(diamonds)
+  freq(diamonds)
+  profiling_num(diamonds)
+  plot_num(diamonds, bins = 100)
+  describe(diamonds)
+  correlation_table(data=diamonds, target="price")
+```
+
+In order to determine which variables are most strongly correlated with price, it is necessary to generate a correlation table. This table shows all of the variables and their correlation coefficient when compared to price. Next, correlation matrices must be generated so that a correlation heatmap can be complied for easy reference. The first correlation matrix is comprised of the variables and their correlation coefficients when compared to one another. The next matrix is a correlation matrix comprised of the p values for each of the variable combinations. As one can see in the output. Those matrices are not very easy to interpret. So, the final correlation matrix, "corr_matrix_fixed", was generated using a function of the p-values and correlation coefficients. While fixed matrix is more uniform than the others, a correlation heatmap is necessary to easily visualize the data.
+  The correlation heatmap was generated using ggcorrplot. Each cell in the visualization has the correlation coefficient of the variables with which it aligns. The cells in red have strong positive correlation, and the cells in blue have strong negative correlation. Those with light pink and light blue have weak correlation. The interactive aspect of this heatmap were added using ggplotly. By examining this visualization and the correlation table, it can be deduced that carat is most strongly correlated with price, with a correlation coefficient of 0.92. This is closely followed by length, width, and depth, which have correllation coefficients of 0.88, 0.87, 0.86 respectively. Chi square tests and t tests were conducted on all the variables in relationship to price, but they proved inconclusive.
+```{r, echo=TRUE}
+#examine all correlations in relation to price
+cor_table <- correlation_table(data=diamonds, target="price")
+cor_table
+#select all continous variables
+cor_data <- diamonds %>%
+  select(price, carat, length, width, depth, depth_perc, table, cut2, color2, clarity2)
+
+#create a corelation matrix of correlation coefficients
+cor_matrix <- cor(cor_data, method = "pearson", use = "complete.obs")
+cor_matrix
+
+#create a correlation matrix of p values using pearson correlation
+cor_matrix_2 <- rcorr(as.matrix(cor_data))
+cor_matrix_2
+
+#since both of these tables are tough to interpret, we want to get it into a way that we can understand what is and is not significant
+
+cor_matrix_fixed <- function(rvals, pvals) {
+  #' @param pvals gets the p-values from corr_matrix_2
+  #' @param rvals gets the correlation coefficients from corr_matrix_2
+  #' creates a data frame of the rows, columns, correlation coefficients, and p-values for the correlation matrix
+  pvals <- cor_matrix_2$P #gets p values from corr_matrix_2
+  rvals <- cor_matrix_2$r #gets correlation coefs from corr_matrix_2
+  ut <- upper.tri(rvals)
+  data.frame(
+    row = rownames(rvals)[row(rvals)[ut]],
+    column = rownames(rvals)[col(rvals)[ut]],
+    cor  = (rvals)[ut],
+    p = pvals[ut]
+    )
+}
+cor_matrix_fixed(cor_matrix_2$P, cor_matrix_2$r)
+
+```
+
+
+```{r, echo=TRUE}
+library(ggcorrplot)
+# Create a correlation matrix of  all of the variables
+mat <- ggcorrplot(cor_matrix, method ="square", type = "full", ggtheme = ggplot2::theme_minimal, title = "Correlation Matrix of Diamond Features", show.legend = TRUE, legend.title = "Correlation", show.diag = FALSE, colors = c("blue", "white", "red"), outline.color = "white", hc.order = FALSE, hc.method = "complete", lab = TRUE, lab_col = "black", lab_size = 2)
+
+#make the heatmap interactive
+q <- ggplotly(p = ggplot2::last_plot())
+q
+
+```
+
+```{r, echo=TRUE}
+
+library(plyr)
+#Write function to perform T tests
+cols_to_test <- c("cut2", "color2", "clarity2", "carat", "depth_perc", "table", "length", "width", "depth")
+t_results <- ldply(
+  cols_to_test,
+  function(colname) {
+    #' @param colname is the name of the column in the dataset
+    #' @param t_val is the value generated from the t-test compared to price
+    #' @param p_val is the p-value associated with the t-test
+    t_val = t.test(diamonds[[colname]], diamonds$price)$statistic
+    p_val = 2*pt(-abs(t_val), df=length(diamonds)-1)
+    return(data.frame(colname=colname, t_value=t_val, p_value=p_val))
+    })
+
+#returns a table that has each variable the p value of its t test vs price
+print(t_results)
+```
+
+```{r, echo=TRUE}
+#write function to perform chi square test
+cols_to_test <- c("cut", "color", "clarity", "carat", "depth_perc", "table", "length", "width", "depth")
+chi_results <- ldply(
+  cols_to_test,
+  function(colname) {
+    #' @param colname is the name of the column in the dataset
+    #' @param chisq_val is the value generated from the chisquare test of a value vs price
+    #' @param p_val is the p-value associated with the t-test
+    chisq_val = chisq.test(diamonds[[colname]], diamonds$price, correct = T)$statistic
+    p_val = chisq.test(diamonds[[colname]], diamonds$price, correct = T)$p.val
+    return(data.frame(colname=colname, chisq_value=chisq_val, p_value=p_val))
+    })
+#return table of chisquare values and p values for each variable when compared to price
+print(chi_results)
+```
+##Modeling
+  Now that the four variables that are most strongly correlated with price have been established, the type of regression analysis must be chosen. A multivariate regression is going to be necessary to compare all four variables to price at the same time. In order to get a better idea of the shape of the data, scatter plots were created for each of the variabels vs. price using the ggplot2 function geom_point(). It is clear from the visualization that these relationships are not linear. because of the upward curvature of the data, an exponential regression analysis is the best suited. The output of the model and the plots to analyze fit are shown below.The intercept is 1.803406, the coefficient for carat is -0.645099, the coefficient for length is 0.988625, for width is 0.037068, and for depth is 0.175085. These are all statistically significant values. Therefore, the formula for price prediction is:
+price = 1.803406 + (-0.645099)xcarat + 0.988625xlength + 0.037068xwidth + 0.175085xdepth
+  Based on the straight line in the residuals plot, the shape of the Q-Q plot, and the straight line in the scale-location plot, it is clear that, although it is not a perfect fit. This is an acceptable and valid model to predict price.
+```{r, echo=TRUE}
+#Scatter plots for strongly correlated variables to determine what kind of model I should use (carat, length, width, depth)
+library(ggplot2)
+carat_scatter <- ggplot(diamonds, aes(x=carat, y=price)) + geom_point() + ggtitle("Scatter Plot of Carat v. Price") +
+  xlab("Carat") + ylab("Price (USD)")
+carat_scatter
+
+length_scatter <- ggplot(diamonds, aes(x=length, y=price)) + geom_point() + ggtitle("Scatter Plot of Length v. Price") + xlab("Length (mm)") + ylab("Price (USD)")
+length_scatter
+
+width_scatter <- ggplot(diamonds, aes(x=width, y=price)) + geom_point() + ggtitle("Scatter Plot of Width v. Price") +
+  xlab("Width (mm)") + ylab("Price (USD)")
+width_scatter
+
+depth_scatter <- ggplot(diamonds, aes(x=depth, y=price)) + geom_point() + ggtitle("Scatter Plot of Depth v. Price") +
+  xlab("Depth (mm)") + ylab("Price (USD)")
+depth_scatter
+
+grid.arrange(carat_scatter, length_scatter, width_scatter, depth_scatter, ncol=2)
+```
+
+```{r, echo=TRUE}
+#Using all variables that have a correlation of 0.4 or higher, create a regression model. These are carat, length, width, depth,
+library(jtools)
+library(survey)
+
+#make an exponential model of the variable vs price
+diamond_model <- glm(log(price) ~ carat + length + width + depth, data = diamonds)
+
+#print out a sumamary of the model
+summary(diamond_model, exp=TRUE)
+
+```
+
+```{r, echo=TRUE}
+
+#plot the model to assess for fit
+par(mfrow=c(2,2))
+plot1 <- plot(diamond_model)
+
+```
+##Predictive Function
+  In order to test the predictive ability of the model, it should be tested through a function. The function below, price_predict, is a function that takes in a vector of values and, based on their designation, places them in the correct place for evaluation in the model. Then, it returns the predicted price. It is important to note that while it is more meaningful if all four variables are present in the vector, if one of them is not present, the if statements within the function will fill in the missing value with the average value from the respective column in the dataset. For the test diamond, the target price is $15,964 USD. The price_predict function returned a price of $15,895 USD, which is a very close estimate given the imperfect fit of our model.
+  Although the function works on diamonds from the dataset. It is important to determine if the function is generalizable to diamonds that are not in the dataset. To do this, the ranges for each of the values were determined, and a random value from each was selected. From each of these random values, a random diamond was generated. Then, the random diamond was evaluated with the price_predict function. The random diamond generated a value of $937 USD, which is well within the range of possible values for diamond prices given the parameters.
+```{r, echo=TRUE}
+
+#vars for function are carat, length, width, depth
+#target price = 15964
+testdiamond <- c(carat=3.40, length=9.42 , width=9.34 , depth=6.27)
+
+price_predict <- function(x){
+  #' returns a price prediction for the values put into the function
+  #' @param x is a vector of 1 to 4 values. their position in the vector determines what their name is
+  #' @param price is the output of the price predition function after it all values are put into the model
+  #' the if statements will assign the mean of the column in place of any missing values
+
+    if(is.na(x[1]))
+        x[1] <- 0.7979397
+    if(is.na(x[2]))
+        x[2] <-5.7311572
+    if(is.na(x[3]))
+        x[3] <-5.7345260
+    if(is.na(x[4]))
+        x[4] <-3.5387338
+
+  price <- 1.803406 + sum((-0.645099)*x[1] + 0.988625*x[2] + 0.037068*x[3] + 0.175085*x[4])
+  return(exp(price)/2)
+}
+
+price_predict(testdiamond)
+```
+
+```{r, echo=TRUE}
+#generate random values for carat, length, width, depth
+rc <- (0.2:5.01)
+rl <- (0:10.74)
+rw <- (0:58.9)
+rd <- (0:31.8)
+#generate a random diamond
+randomdiamond <- c(carat=sample(rc,1), length=sample(rl,1), width=sample(rw,1), depth=sample(rd,1))
+#price_predict <- predict.glm(diamond_model, newdata = testdiamond, type = "response",se.fit = FALSE, dispersion = NULL, terms = NULL,na.action = na.pass)
+price_predict <- function(x){
+  #' returns a price prediction for the values put into the function
+  #' @param x is a vector of 1 to 4 values. their position in the vector determines what their name is
+  #' @param price is the output of the price predition function after it all values are put into the model
+  #' the if statements will assign the mean of the column in place of any missing values
+    if(is.na(x[1]))
+        x[1] <- 0.7979397
+    if(is.na(x[2]))
+        x[2] <-5.7311572
+    if(is.na(x[3]))
+        x[3] <-5.7345260
+    if(is.na(x[4]))
+        x[4] <-3.5387338
+
+  price <- 1.803406 + sum((-0.645099)*x[1] + 0.988625*x[2] + 0.037068*x[3] + 0.175085*x[4])
+  return(exp(price)/2)
+}
+
+price_predict(randomdiamond)
+```
+##Conclusion
+  Completing this project required competency in several programming areas. First, in order to evaluate this dataset, one must know how to clean data and manipulate it in such a way that it is easy to analyze and udnerstand. Next, one must understand how to visualize data and conclude which variables are significant for the project. After that, it is important to be able to further visualize data so that the proper model for regression analysis can be determined. After that, one must be able to generate a regression model to predict price, write a function to utilize that model in price prediction, and simulate data to evaluate the efficacy of that function.
+  Based on thse findings, it is clear that carat is the most strongly correlated with price, and it is closely followed by length, width, and depth. Because carat is the weight of the diamond and length, width, and depth are are related to the size of the diamond, it makes sense that these are the strongest predictors of price because large diamonds are frequently in high demand. Also, size and weight are closely related, so it makes sense that they would both be correlated with price. While it was originally hypothesized that cut, color, or clarity may also have a significant impact on price, the analysis showed that this is not the case. This may be because, while these are factors one may want to consider when making a purchase, carat is still a more important factor to most consumers.
+  While the model has a reasonable fit, it is not perfect, and therefore it is not a perfect predictor of price. However, with this in mind, it is able to return reasonable estimates for diamonds in the dataset and simulated diamonds. Further research into this subject could study how to better fit the model. Overall, this analysis was able to solidly and comprehensively examine how various features of diamonds relate to one another and influence price.
